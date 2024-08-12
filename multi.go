@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/bzip2"
 	"errors"
+	"fmt"
 	"hash/crc32"
 )
 

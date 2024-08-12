@@ -2,6 +2,7 @@ package a2s
 
 import (
 	"errors"
+	"fmt"
 )
 
 const (
@@ -54,7 +55,7 @@ func (c *Client) getChallenge(header []byte, fullResult byte) ([]byte, bool, err
 	}
 
 	// Check if there is at least one more byte for the header
-	if reader.Remaining() < 1 {
+	if reader.Pos()+1 > len(reader.buffer) {
 		return nil, false, fmt.Errorf("insufficient data to read challenge header: %v", data)
 	}
 
@@ -62,7 +63,7 @@ func (c *Client) getChallenge(header []byte, fullResult byte) ([]byte, bool, err
 
 	if headerByte == A2S_PLAYER_CHALLENGE_REPLY_HEADER {
 		// Check if there are at least 4 more bytes for the challenge number
-		if reader.Remaining() < 4 {
+		if reader.Pos()+4 > len(reader.buffer) {
 			return nil, false, fmt.Errorf("insufficient data for challenge number: %v", data)
 		}
 		return data[reader.Pos() : reader.Pos()+4], false, nil

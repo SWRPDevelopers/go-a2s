@@ -80,19 +80,24 @@ func (c *Client) parseMultiplePacketHeader(data []byte) (*MultiPacketHeader, err
 
 func (c *Client) collectMultiplePacketResponse(data []byte) ([]byte, error) {
 	header, err := c.parseMultiplePacketHeader(data)
-
 	if err != nil {
-		return []byte{}, ErrBadPacketHeader
+		return nil, fmt.Errorf("failed to parse multi-packet header: %w", err)
 	}
 
 	packets := make([]*MultiPacketHeader, header.Total)
 
-	received := 0
-	fullSize := 0
+	packets[header.Number] = header
+	fullSize := len(header.Payload)
 
-	for {
-		if int(header.Number) >= len(packets) {
-			return nil, ErrPacketOutOfBound
+	for received := 1; received < int(header.Total); received++ {
+		data, err := c.receive()
+		if err != nil {
+			return nil, fmt.Errorf("failed to receive additional packet: %w", err)
+		}
+
+		header, err := c.parseMultiplePacketHeader(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse additional packet header: %w", err)
 		}
 
 		if packets[header.Number] != nil {
@@ -100,67 +105,33 @@ func (c *Client) collectMultiplePacketResponse(data []byte) ([]byte, error) {
 		}
 
 		packets[header.Number] = header
-
 		fullSize += len(header.Payload)
-
-		received++
-
-		if received == len(packets) {
-			break
-		}
-
-		data, err := c.receive()
-
-		if err != nil {
-			return nil, err
-		}
-
-		header, err = c.parseMultiplePacketHeader(data)
-
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	payload := make([]byte, fullSize)
-
 	cursor := 0
-
-	for _, header := range packets {
-		copy(payload[cursor:cursor+len(header.Payload)], header.Payload)
-		cursor += len(header.Payload)
+	for _, packet := range packets {
+		copy(payload[cursor:], packet.Payload)
+		cursor += len(packet.Payload)
 	}
 
-	// Includes decompressed size & crc32 sum as that is unread yet, so it's included as part of payload
-	reader := NewPacketReader(payload)
-
 	if packets[0].Compressed {
+		reader := NewPacketReader(payload)
 		decompressedSize := reader.ReadUint32()
 		checkSum := reader.ReadUint32()
 
-		if decompressedSize > uint32(1024*1024) {
-			return nil, ErrWrongBz2Size
-		}
-
 		decompressed := make([]byte, decompressedSize)
+		bz2Reader := bzip2.NewReader(bytes.NewReader(payload[reader.Pos():]))
 
-		bz2Reader := bzip2.NewReader(bytes.NewReader(data[reader.Pos():]))
-
-		n, err := bz2Reader.Read(decompressed)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if n != int(decompressedSize) {
-			return nil, ErrWrongBz2Size
+		if _, err := bz2Reader.Read(decompressed); err != nil {
+			return nil, fmt.Errorf("failed to decompress payload: %w", err)
 		}
 
 		if crc32.ChecksumIEEE(decompressed) != checkSum {
 			return nil, ErrMismatchBz2Checksum
 		}
 
-		payload = decompressed
+		return decompressed, nil
 	}
 
 	return payload, nil

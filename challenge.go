@@ -22,6 +22,11 @@ func (c *Client) getChallenge(header []byte, fullResult byte) ([]byte, bool, err
 		return nil, false, fmt.Errorf("failed to receive data: %w", err)
 	}
 
+	// Handle the case where the server might not send any data
+	if len(data) == 0 {
+		return nil, false, fmt.Errorf("no data received from server, possibly offline or unresponsive")
+	}
+
 	// Ensure the packet is large enough to contain the required uint32
 	if len(data) < 4 {
 		return nil, false, fmt.Errorf("received data is too short: length %d, expected at least 4 bytes", len(data))

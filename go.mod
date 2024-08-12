@@ -1,4 +1,4 @@
-module github.com/rumblefrog/go-a2s
+module github.com/swrpdevelopers/go-a2s
 
 go 1.19
 

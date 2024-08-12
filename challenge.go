@@ -22,9 +22,9 @@ func (c *Client) getChallenge(header []byte, fullResult byte) ([]byte, bool, err
 		return nil, false, fmt.Errorf("failed to receive data: %w", err)
 	}
 
+	// Ensure the packet is large enough to contain the required uint32
 	if len(data) < 4 {
-		// Log the error and return it without causing a panic
-		return nil, false, fmt.Errorf("received data is too short: %v", data)
+		return nil, false, fmt.Errorf("received data is too short: length %d, expected at least 4 bytes", len(data))
 	}
 
 	reader := NewPacketReader(data)
@@ -43,18 +43,20 @@ func (c *Client) getChallenge(header []byte, fullResult byte) ([]byte, bool, err
 		}
 		return fullData, true, nil
 	case -1:
-		// Continue with single packet
+		// Single packet, continue processing
 	default:
 		return nil, false, fmt.Errorf("unexpected packet header: %v", packetType)
 	}
 
-	headerByte, ok := reader.TryReadUint8()
-	if !ok {
-		return nil, false, fmt.Errorf("failed to read challenge header: %v", data)
+	// Check if there is at least one more byte for the header
+	if reader.Remaining() < 1 {
+		return nil, false, fmt.Errorf("insufficient data to read challenge header: %v", data)
 	}
 
+	headerByte := reader.ReadUint8()
+
 	if headerByte == A2S_PLAYER_CHALLENGE_REPLY_HEADER {
-		// Check if we can read 4 more bytes for the challenge
+		// Check if there are at least 4 more bytes for the challenge number
 		if reader.Remaining() < 4 {
 			return nil, false, fmt.Errorf("insufficient data for challenge number: %v", data)
 		}
